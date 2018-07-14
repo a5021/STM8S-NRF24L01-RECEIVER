@@ -1,0 +1,2 @@
+# STM8S-NRF24L01-RECEIVER
+Simple STM8S based 2.4 GHz nRF24L01+ receiver
