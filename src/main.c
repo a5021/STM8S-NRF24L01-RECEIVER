@@ -479,15 +479,12 @@ uint8_t static inline nrf_detect(void) {
   return NRF24L01_DETECTED;
 }  
 
-// static uint8_t payload_buf[32];
-
 void swap_endianess(uint8_t src[], uint8_t dst[]) {
   dst[0] = src[3];
   dst[1] = src[2];
   dst[2] = src[1];
   dst[3] = src[0];
 }
-
 
 typedef struct __attribute__((packed)) {
   uint32_t p : 20;
@@ -497,11 +494,9 @@ typedef struct __attribute__((packed)) {
 
 int main(void) {
 
-  // dg_t dg;
   int32_t temp;
   uint32_t press, hum;
   uint8_t payload_buf[32];
-  // pld_t *s = (pld_t *)payload_buf;
 
   CLK_CKDIVR = 0;
   IWDG_KR= 0xAA;	   // wdog refresh
@@ -512,7 +507,6 @@ int main(void) {
   initGPIO();
   initSPI();
   initUART();
-  // initTIM1();
   initTIM2();
 
   RUN_CPU_NORMAL();
