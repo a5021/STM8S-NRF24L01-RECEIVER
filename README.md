@@ -1,5 +1,6 @@
 # STM8S-NRF24L01-RECEIVER
-Simple STM8S based 2.4 GHz nRF24L01+ receiver
+
+Simple __STM8S__ based 2.4 GHz __nRF24L01+__ receiver
 
 The receiver listens the radio channel specified and prints in HEX all the data it receives.
 
