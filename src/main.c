@@ -494,6 +494,7 @@ typedef struct __attribute__((packed)) {
 
 int main(void) {
 
+  uint16_t v_bat;
   int32_t temp;
   uint32_t press, hum;
   uint8_t payload_buf[32];
@@ -593,12 +594,13 @@ int main(void) {
     swap_endianess((uint8_t *)&payload_buf[0], (uint8_t *)&press);
     swap_endianess((uint8_t *)&payload_buf[4], (uint8_t *)&temp);
     swap_endianess((uint8_t *)&payload_buf[8], (uint8_t *)&hum);
+    v_bat = payload_buf[13] << 8 | payload_buf[12];
     IWDG_KR= 0xAA;	              // wdog refresh
     
     OPEN_UART();
       printHex(payload_buf, pSize);
       hum /= 10;
-      uprintf(":  %ld.%02ldC,\t %ld.%02ld Pa / %ld.%02ld mmHg,\t %ld.%02ld%%\n", temp / 100, temp % 100, press / 100, press % 100, press / 13332, press % 13332 * 100 / 13332, hum / 100, hum % 100);
+      uprintf(":  %ld.%02ldC,\t %ld.%02ld Pa / %ld.%02ld mmHg,\t %ld.%02ld%%, V_BAT = %u.%03u\n", temp / 100, temp % 100, press / 100, press % 100, press / 13332, press % 13332 * 100 / 13332, hum / 100, hum % 100, v_bat / 1000, v_bat % 1000);
     CLOSE_UART();              // stop clocking UART1
   }
 }
