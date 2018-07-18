@@ -133,7 +133,10 @@ uint8_t static inline uart_puts(char *s) {
   return !0;
 }
 
-#define uprintf(...) for(char _b[100]; snprintf(_b, sizeof(_b), __VA_ARGS__), uart_puts(_b), 0;){}
+// #define uprintf(...) for(char _b[100]; snprintf(_b, sizeof(_b), __VA_ARGS__), uart_puts(_b), 0;){}
+
+char _b00[100];
+#define uprintf(...) snprintf(_b00, sizeof(_b00), __VA_ARGS__); uart_puts(_b00)
 
 void static inline initUART(void) {
   
@@ -164,10 +167,10 @@ void static inline print_str(char *c) {
   };
 }
 
-//void static inline print_char(char c) {
-//  while (UART1_SR_TXE == 0);
-//  UART1_DR = c;
-//}
+void static inline print_char(char *c) {
+  while (UART1_SR_TXE == 0);
+  UART1_DR = *c;
+}
 
 void static inline printHex(uint8_t buf[], uint8_t len) {
   for (uint8_t i = 0; i < len; i++) {
@@ -371,7 +374,7 @@ void static inline initWatchdog(void) {
   //
   IWDG_KR  = 0xCC;  // enable and start the wdog counter at first!
   IWDG_KR  = 0x55;  // unlock wdog configuration registers
-  IWDG_PR  = 0x03;  // set prescaler value
+  IWDG_PR  = 0x04;  // set prescaler value
   IWDG_RLR = 0x3F;  // set timeout value
   IWDG_KR  = 0xAA;  // lock wdog registers & reload the wdog counter  
 }
@@ -479,25 +482,15 @@ uint8_t static inline nrf_detect(void) {
   return NRF24L01_DETECTED;
 }  
 
-void swap_endianess(uint8_t src[], uint8_t dst[]) {
-  dst[0] = src[3];
-  dst[1] = src[2];
-  dst[2] = src[1];
-  dst[3] = src[0];
-}
-
-typedef struct __attribute__((packed)) {
-  uint32_t p : 20;
-  int32_t  t : 14;
-  uint32_t h : 14;
-} pld_t;
+uint8_t payload_buf[32];
 
 int main(void) {
 
+  int8_t t0;
   uint16_t v_bat;
-  int32_t temp;
-  uint32_t press, hum;
-  uint8_t payload_buf[32];
+  int16_t temp;
+  uint32_t press;
+  uint16_t hum;
 
   CLK_CKDIVR = 0;
   IWDG_KR= 0xAA;	   // wdog refresh
@@ -534,7 +527,7 @@ int main(void) {
     (c1 & (NRF24_RF_SETUP_RF_PWR_0  | NRF24_RF_SETUP_RF_PWR_1)) * 6 - 18,
     ((c1 & NRF24_RF_SETUP_RF_DR_LOW) == NRF24_RF_SETUP_RF_DR_LOW) ? "256k" : (((c1 & NRF24_RF_SETUP_RF_DR_HIGH) == NRF24_RF_SETUP_RF_DR_HIGH) ? "2M" : "1M"),
     ((c2 & NRF24_CONFIG_EN_CRC) == 0) ? "NO" : ((c2 & NRF24_CONFIG_CRCO) == NRF24_CONFIG_CRCO) ? "16" : "8"
-  )
+  );
     
   uprintf("RX ADDR: ");
     
@@ -591,16 +584,37 @@ int main(void) {
     
     CLOCK_DISABLE(SPI);                 // stop SPI clocking
     
-    swap_endianess((uint8_t *)&payload_buf[0], (uint8_t *)&press);
-    swap_endianess((uint8_t *)&payload_buf[4], (uint8_t *)&temp);
-    swap_endianess((uint8_t *)&payload_buf[8], (uint8_t *)&hum);
-    v_bat = payload_buf[13] << 8 | payload_buf[12];
+    press = (uint32_t) payload_buf[2] << 16 | (uint32_t) payload_buf[1] << 8 | payload_buf[0];
+    t0 = payload_buf[3];
+    temp = payload_buf[5] << 8 | payload_buf[4];
+    hum = payload_buf[7] << 8 | payload_buf[6];
+    v_bat = payload_buf[9] << 8 | payload_buf[8];
+    
     IWDG_KR= 0xAA;	              // wdog refresh
     
+    char sign1, sign2;
+    if (temp < 0) {
+      sign1 = '-';
+      temp *= -1;
+    } else {
+      sign1 = ' ';
+    }
+    
+    if (t0 < 0) {
+      sign2 = '-';
+      t0 *= -1;
+    } else {
+      sign2 = ' ';
+    }
+    
+        
     OPEN_UART();
       printHex(payload_buf, pSize);
-      hum /= 10;
-      uprintf(":  %ld.%02ldC,\t %ld.%02ld Pa / %ld.%02ld mmHg,\t %ld.%02ld%%, V_BAT = %u.%03u\n", temp / 100, temp % 100, press / 100, press % 100, press / 13332, press % 13332 * 100 / 13332, hum / 100, hum % 100, v_bat / 1000, v_bat % 1000);
+      uprintf(":  ");
+      if (sign1 == '-') print_char("-");
+      uprintf("%d.%02dC / ", temp / 100, temp % 100);
+      if (sign2 == '-') print_char("-");
+      uprintf("%dC, %ld.%02ld Pa / %ld.%02ld mmHg, %d.%02d%%, V_BAT = %u.%03u\n", t0, press / 100, press % 100, press / 13332, press % 13332 * 100 / 13332, hum / 100, hum % 100, v_bat / 1000, v_bat % 1000);
     CLOSE_UART();              // stop clocking UART1
   }
 }
