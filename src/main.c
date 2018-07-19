@@ -133,10 +133,10 @@ uint8_t static inline uart_puts(char *s) {
   return !0;
 }
 
-// #define uprintf(...) for(char _b[100]; snprintf(_b, sizeof(_b), __VA_ARGS__), uart_puts(_b), 0;){}
+// #define uprintf(...) for(char _b[80]; snprintf(_b, sizeof(_b), __VA_ARGS__), uart_puts(_b), 0;){}
 
-char _b00[100];
-#define uprintf(...) snprintf(_b00, sizeof(_b00), __VA_ARGS__); uart_puts(_b00)
+// char _b00[100];
+#define uprintf(...) snprintf(_buf, sizeof(_buf), __VA_ARGS__); uart_puts(_buf)
 
 void static inline initUART(void) {
   
@@ -482,7 +482,7 @@ uint8_t static inline nrf_detect(void) {
   return NRF24L01_DETECTED;
 }  
 
-uint8_t payload_buf[32];
+char _buf[80];
 
 int main(void) {
 
@@ -580,15 +580,16 @@ int main(void) {
       continue;
     }
     
-    nrf_get_payload(payload_buf, pSize);
+    nrf_get_payload((uint8_t*)_buf, pSize);
     
     CLOCK_DISABLE(SPI);                 // stop SPI clocking
     
-    press = (uint32_t) payload_buf[2] << 16 | (uint32_t) payload_buf[1] << 8 | payload_buf[0];
-    t0 = payload_buf[3];
-    temp = payload_buf[5] << 8 | payload_buf[4];
-    hum = payload_buf[7] << 8 | payload_buf[6];
-    v_bat = payload_buf[9] << 8 | payload_buf[8];
+       /* change the endianess of the data received  */    
+    press = (uint32_t) _buf[2] << 16 | (uint32_t) _buf[1] << 8 | _buf[0];
+    t0    = _buf[3];
+    temp  = _buf[5] << 8 | _buf[4];
+    hum   = _buf[7] << 8 | _buf[6];
+    v_bat = _buf[9] << 8 | _buf[8];
     
     IWDG_KR= 0xAA;	              // wdog refresh
     
@@ -606,10 +607,9 @@ int main(void) {
     } else {
       sign2 = ' ';
     }
-    
         
     OPEN_UART();
-      printHex(payload_buf, pSize);
+      printHex((uint8_t*)_buf, pSize);
       uprintf(":  ");
       if (sign1 == '-') print_char("-");
       uprintf("%d.%02dC / ", temp / 100, temp % 100);
