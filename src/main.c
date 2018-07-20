@@ -122,21 +122,20 @@
 #define OPEN_UART()              CLOCK_ENABLE(UART1)         
 #define CLOSE_UART()             while (UART1_SR_TC == 0); CLOCK_DISABLE(UART1)
 
-#define UART_PUTC(C)	                                        \
-  while (UART1_SR_TXE == 0);                                    \
-  UART1_DR = C
-
-uint8_t static inline uart_puts(char *s) {
-  while (*s != 0) {
-    UART_PUTC(*s++);
-  }
-  return !0;
-}
+// #define UART_PUTC(C)	                                        \
+//   while (UART1_SR_TXE == 0);                                    \
+//   UART1_DR = C
+// 
+// uint8_t static inline uart_puts(char *s) {
+//   while (*s != 0) {
+//     UART_PUTC(*s++);
+//   }
+//   return !0;
+// }
 
 // #define uprintf(...) for(char _b[80]; snprintf(_b, sizeof(_b), __VA_ARGS__), uart_puts(_b), 0;){}
 
-// char _b00[100];
-#define uprintf(...) snprintf(_buf, sizeof(_buf), __VA_ARGS__); uart_puts(_buf)
+#define uprintf(B, ...) snprintf(B, sizeof(B), __VA_ARGS__); uputs(B)
 
 void static inline initUART(void) {
   
@@ -150,32 +149,23 @@ void static inline initUART(void) {
   // UART1_CR2_REN=1;   // Enable receiver
 }
 
-void static inline print_hex(uint8_t c) {
-  if (c < 10) {
-    c += '0';
-  } else {
-    c += ('A' - 10);
-  }
-  while (UART1_SR_TXE == 0);
+void static inline uputc(char c) {
+  while (UART1_SR_TXE == 0); 
   UART1_DR = c;
 }
 
-void static inline print_str(char *c) {
-  while (*c != 0) {
-    while (UART1_SR_TXE == 0);
-    UART1_DR = *c++;
-  };
+void static inline uputs(char *s) {
+  while (*s != 0) uputc(*s++);
 }
 
-void static inline print_char(char *c) {
-  while (UART1_SR_TXE == 0);
-  UART1_DR = *c;
+void static inline uputx(uint8_t c) {
+  uputc(c + ((c < 10) ? '0' : 'A' - 10));
 }
 
-void static inline printHex(uint8_t buf[], uint8_t len) {
+void static inline printHex(uint8_t *buf, uint8_t len) {
   for (uint8_t i = 0; i < len; i++) {
-    print_hex(buf[i] >> 4);
-    print_hex(buf[i] & 0x0F);
+    uputx(buf[i] >> 4);
+    uputx(buf[i] & 0x0F);
   };
 }
 
@@ -210,9 +200,9 @@ void static inline initSPI() {
 
 // Bidirectional SPI transfer function
 uint8_t static inline spi(uint8_t tx) {
-  while (SPI_SR_TXE != 1);
+  while (SPI_SR_TXE == 0);
   SPI_DR = tx;
-  while (SPI_SR_RXNE != 1);
+  while (SPI_SR_RXNE == 0);
   return SPI_DR;
 }
 
@@ -381,33 +371,33 @@ void static inline initWatchdog(void) {
 
 void static inline printResetStatus(void) {
   if (RST_SR != 0) {
-    print_str("\nReset source:");
+    uputs("\nReset source:");
     
     if (RST_SR_WWDGF == 1) {
       RST_SR_WWDGF = 1;    // reset Window Watchdog bit
-      print_str(" WWDG");
+      uputs(" WWDG");
     }
   
     if (RST_SR_IWDGF == 1) {
       RST_SR_IWDGF = 1;    // reset Independent Watchdog bit
-      print_str(" IWDG");
+      uputs(" IWDG");
     }
 
     if (RST_SR_ILLOPF == 1) {
       RST_SR_ILLOPF = 1;   // reset Illegal OpCode bit
-      print_str(" ILLOP");
+      uputs(" ILLOP");
     }
   
     if (RST_SR_SWIMF == 1) {
       RST_SR_SWIMF = 1;    // reset SWIM bit
-      print_str(" SWIM");
+      uputs(" SWIM");
     }
 
     if (RST_SR_EMCF == 1) {
       RST_SR_EMCF = 1;     // reset EMC bit
-      print_str(" EMC");
+      uputs(" EMC");
     }
-    print_str("\n");
+    uputs("\n");
   }
 }
 
@@ -482,6 +472,17 @@ uint8_t static inline nrf_detect(void) {
   return NRF24L01_DETECTED;
 }  
 
+void static inline nrf_print_addr(uint8_t a, uint8_t len) {
+  CSN_LOW();
+  spi(NRF24_R_REGISTER | (NRF24_REGISTER_MASK & a));
+  for (uint8_t i = 0; i < len; i++) {
+    uint8_t b = spi(NRF24_NOP);
+    uputx(b >> 4);
+    uputx(b & 0x0F);
+  }
+  CSN_HIGH();
+}
+
 char _buf[80];
 
 int main(void) {
@@ -505,11 +506,11 @@ int main(void) {
 
   RUN_CPU_NORMAL();
   
-  uprintf("NRF24L01 Receiver started.\n");
+  uprintf(_buf, "NRF24L01 Receiver started.\n");
   printResetStatus();
   
   while (nrf_detect() == NRF24L01_NOT_DETECTED) {
-    print_str("No NRF24L01 detected. Wait 15 sec...\n");
+    uputs("No NRF24L01 detected. Wait 15 sec...\n");
     TIM2_CR1_CEN = 1;           // run timer 2
     while (TIM2_CR1_CEN != 0) { // while until TIM2 overflow
       IWDG_KR= 0xAA;		// wdog refresh
@@ -522,36 +523,22 @@ int main(void) {
 
   uint8_t c1 = nrf_read_register(NRF24_RF_SETUP_REG); // get RF settings
   uint8_t c2 = nrf_read_register(NRF24_CONFIG_REG);   // get config
-  uprintf("NRF24L01: CH = %u, PWR = %ddBm, BR = %s, CRC = %s\n", 
+  uprintf(_buf, "NRF24L01: CH = %u, PWR = %ddBm, BR = %s, CRC = %s\n", 
     nrf_read_register(NRF24_RF_CH_REG),
     (c1 & (NRF24_RF_SETUP_RF_PWR_0  | NRF24_RF_SETUP_RF_PWR_1)) * 6 - 18,
     ((c1 & NRF24_RF_SETUP_RF_DR_LOW) == NRF24_RF_SETUP_RF_DR_LOW) ? "256k" : (((c1 & NRF24_RF_SETUP_RF_DR_HIGH) == NRF24_RF_SETUP_RF_DR_HIGH) ? "2M" : "1M"),
     ((c2 & NRF24_CONFIG_EN_CRC) == 0) ? "NO" : ((c2 & NRF24_CONFIG_CRCO) == NRF24_CONFIG_CRCO) ? "16" : "8"
   );
-    
-  uprintf("RX ADDR: ");
-    
-  CSN_LOW();
-  spi(NRF24_R_REGISTER | (NRF24_REGISTER_MASK & NRF24_RX_ADDR_P0_REG));
-  for (uint8_t i = 0; i < 5; i++) {
-    uint8_t b = spi(NRF24_NOP);
-    print_hex(b >> 4);
-    print_hex(b & 0x0F);
-  }
-  CSN_HIGH();
-
-  uprintf("\nTX ADDR: ");  
-
-  CSN_LOW();
-  spi(NRF24_R_REGISTER | (NRF24_REGISTER_MASK & NRF24_TX_ADDR_REG));
-  for (uint8_t i = 0; i < 5; i++) {
-    uint8_t b = spi(NRF24_NOP);
-    print_hex(b >> 4);
-    print_hex(b & 0x0F);
-  }
-  CSN_HIGH();
   
-  uprintf("\n");  
+  uint8_t a_len = nrf_read_register(0x03) + 2;
+  
+  uputs("RX ADDR: ");
+  nrf_print_addr(NRF24_RX_ADDR_P0_REG, a_len);
+  
+  uputs("\nTX ADDR: ");  
+  nrf_print_addr(NRF24_TX_ADDR_REG, a_len);
+  
+  uputc('\n');
   
   CLOSE_UART();
   
@@ -610,11 +597,11 @@ int main(void) {
         
     OPEN_UART();
       printHex((uint8_t*)_buf, pSize);
-      uprintf(":  ");
-      if (sign1 == '-') print_char("-");
-      uprintf("%d.%02dC / ", temp / 100, temp % 100);
-      if (sign2 == '-') print_char("-");
-      uprintf("%dC, %ld.%02ld Pa / %ld.%02ld mmHg, %d.%02d%%, V_BAT = %u.%03u\n", t0, press / 100, press % 100, press / 13332, press % 13332 * 100 / 13332, hum / 100, hum % 100, v_bat / 1000, v_bat % 1000);
+      uputs(":  ");
+      if (sign1 == '-') uputc('-');
+      uprintf(_buf, "%d.%02dC / ", temp / 100, temp % 100);
+      if (sign2 == '-') uputc('-');
+      uprintf(_buf, "%dC, %ld.%02ld Pa / %ld.%02ld mmHg, %d.%02d%%, V_BAT = %u.%03u\n", t0, press / 100, press % 100, press / 13332, press % 13332 * 100 / 13332, hum / 100, hum % 100, v_bat / 1000, v_bat % 1000);
     CLOSE_UART();              // stop clocking UART1
   }
 }
