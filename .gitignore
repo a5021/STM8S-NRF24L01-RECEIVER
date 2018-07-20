@@ -23,5 +23,7 @@
 *.uvguix.*
 *.scvd
 *.tmp
+*.pdsbak
+*.workspace
 settings/
 Debug/
