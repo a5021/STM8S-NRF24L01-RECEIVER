@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include "iostm8s003f3.h"
 #include "pindef.h"
 
@@ -65,6 +66,8 @@
 #define CKDIVR_CPUDIV_128       7
 
 #define NRF24_CONFIG_REG        0x00
+#define NRF24_EN_AA_REG         0x01
+#define NRF24_SETUP_AW_REG      0x03
 #define NRF24_RF_CH_REG         0x05
 #define NRF24_RF_SETUP_REG      0x06
 #define NRF24_STATUS_REG        0x07
@@ -74,7 +77,7 @@
 #define NRF24_DYNPD_REG         0x1C
 #define NRF24_FEATURE_REG       0x1D 
           
-// 00: CONFIG register bits from 0 t0 6, bit 7 must be set to 0
+// 00: CONFIG register bits from 0 t_die 6, bit 7 must be set to 0
 // ============================================================
 #define NRF24_CONFIG_PRIM_RX    (1 << 0)
 #define NRF24_CONFIG_PWR_UP     (1 << 1)
@@ -235,13 +238,13 @@ uint8_t static inline nrf_write_register(uint8_t regNo, uint8_t regVal) {
 // 
 uint8_t static inline nrf_init(uint8_t channel) {
 
-  nrf_write_register(0x03, 1);       //  REG 0x03 - RX/TX Address width
-                                     //  0 = Illegal
-                                     //  1 = 3 bytes
-                                     //  2 = 4 bytes
-                                     //  3 = 5 bytes
-  // nrf_write_register(EN_AA, 0);
-  nrf_write_register(0x05, channel); // REG 0x05 -- radio channel no
+  nrf_write_register(NRF24_SETUP_AW_REG, 1);  //  RX/TX Address width
+                                              //  0 = Illegal
+                                              //  1 = 3 bytes
+                                              //  2 = 4 bytes
+                                              //  3 = 5 bytes
+  // nrf_write_register(NRF24_EN_AA_REG, 0);       // Disable auto acknowlegement
+  nrf_write_register(NRF24_RF_CH_REG, channel); // Set radio channel number
 /*  
   nrf_write_register(0x06,           // REG 0x06 -- data rate and pwr lvl
       //  Set RF output power in TX mode
@@ -326,14 +329,6 @@ uint8_t static inline nrf_get_payload_size(void) {
 
 void static inline nrf_get_payload(uint8_t buf[], uint8_t len) {
   
-  // The RX_DR IRQ is asserted by a new packet arrival event. 
-  // The procedure for handling this interrupt should be: 
-  //    1) read payload through SPI, 
-  //    2) clear RX_DR IRQ, 
-  //    3) read FIFO_STATUS to check if there are more
-  //       payloads available in RX FIFO, 
-  //    4) if there are more data in RX FIFO, repeat from step 1).  
-  
   CSN_LOW();
 
   spi(NRF24_R_RX_PAYLOAD);  // 0x61 = "Read RX Payload" CMD
@@ -364,7 +359,7 @@ void static inline initWatchdog(void) {
   //
   IWDG_KR  = 0xCC;  // enable and start the wdog counter at first!
   IWDG_KR  = 0x55;  // unlock wdog configuration registers
-  IWDG_PR  = 0x04;  // set prescaler value
+  IWDG_PR  = 0x03;  // set prescaler value
   IWDG_RLR = 0x3F;  // set timeout value
   IWDG_KR  = 0xAA;  // lock wdog registers & reload the wdog counter  
 }
@@ -487,7 +482,7 @@ char _buf[80];
 
 int main(void) {
 
-  int8_t t0;
+  int8_t t_die;
   uint16_t v_bat;
   int16_t temp;
   uint32_t press;
@@ -544,65 +539,68 @@ int main(void) {
   
   nrf_start_receiving();
   
-  while (1) {              // ================= main loop ===============
-    
+  while (1) {    // ================= main loop ===============
+
+    // The RX_DR IRQ is asserted by a new packet arrival event. 
+    // The procedure for handling this interrupt should be: 
+    //    1) read payload through SPI, 
+    //    2) clear RX_DR IRQ, 
+    //    3) read FIFO_STATUS to check if there are more
+    //       payloads available in RX FIFO, 
+    //    4) if there are more data in RX FIFO, repeat from step 1).  
+  
+
     while(PC_IDR_IDR4 != 0) {           // while IRQ line stands high
-      IWDG_KR= 0xAA;	                // wdog refresh
+      IWDG_KR= 0xAA;	                // refresh watchdog
     }
     CLOCK_ENABLE(SPI);                  // start SPI clocking
     
-    if ((nrf_read_register(NRF24_FIFO_STATUS_REG) & NRF24_FIFO_STATUS_RX_EMPTY) == NRF24_FIFO_STATUS_RX_EMPTY) {
-      nrf_write_register(NRF24_STATUS_REG, 0x70); // clear status bits
-      CLOCK_DISABLE(SPI);               // stop SPI clocking
-      continue;
-    }
+    while ((nrf_read_register(NRF24_FIFO_STATUS_REG) & NRF24_FIFO_STATUS_RX_EMPTY) == 0) {
+      IWDG_KR= 0xAA;	                // wdog refresh
+      uint8_t pSize = nrf_get_payload_size();
+      if (pSize > 32) {
+        nrf_write_register(NRF24_STATUS_REG, 0x70); // clear status bits
+        nrf_write_cmd(NRF24_FLUSH_RX);              // 0xE2 = clear RX buffer
+        break;
+      }
       
-    nrf_write_register(NRF24_STATUS_REG, 0x40); // clear RX_DR bit, release IRQ line
-    
-    uint8_t pSize = nrf_get_payload_size();
-    if (pSize > 32) {
-      nrf_write_register(NRF24_STATUS_REG, 0x70); // clear status bits
-      nrf_write_cmd(0xE2);              // 0xE2 = clear RX buffer
-      CLOCK_DISABLE(SPI);               // stop SPI clocking
-      continue;
+      nrf_get_payload((uint8_t*)_buf, pSize);
+      
+         /* change the endianess of the data received  */    
+      press = (uint32_t) _buf[2] << 16 | (uint32_t) _buf[1] << 8 | _buf[0];
+      t_die = _buf[3];
+      temp  = _buf[5] << 8 | _buf[4];
+      hum   = _buf[7] << 8 | _buf[6];
+      v_bat = _buf[9] << 8 | _buf[8];
+      
+      IWDG_KR= 0xAA;	              // wdog refresh
+      
+      char sign1, sign2;
+      if (temp < 0) {
+        sign1 = '-';
+        temp *= -1;
+      } else {
+        sign1 = ' ';
+      }
+      
+      if (t_die < 0) {
+        sign2 = '-';
+        t_die *= -1;
+      } else {
+        sign2 = ' ';
+      }
+          
+      OPEN_UART();      // start clocking UART1
+        printHex((uint8_t*)_buf, pSize);
+        uputs(":  ");
+        if (sign1 == '-') uputc('-');
+        uprintf(_buf, "%d.%02dC / ", temp / 100, temp % 100);
+        if (sign2 == '-') uputc('-');
+        uprintf(_buf, "%dC, %ld.%02ld Pa / %ld.%02ld mmHg, %d.%02d%%, V_BAT = %u.%03u\n", t_die, press / 100, press % 100, press / 13332, press % 13332 * 100 / 13332, hum / 100, hum % 100, v_bat / 1000, v_bat % 1000);
+      CLOSE_UART();     // stop clocking UART1
     }
-    
-    nrf_get_payload((uint8_t*)_buf, pSize);
-    
-    CLOCK_DISABLE(SPI);                 // stop SPI clocking
-    
-       /* change the endianess of the data received  */    
-    press = (uint32_t) _buf[2] << 16 | (uint32_t) _buf[1] << 8 | _buf[0];
-    t0    = _buf[3];
-    temp  = _buf[5] << 8 | _buf[4];
-    hum   = _buf[7] << 8 | _buf[6];
-    v_bat = _buf[9] << 8 | _buf[8];
-    
-    IWDG_KR= 0xAA;	              // wdog refresh
-    
-    char sign1, sign2;
-    if (temp < 0) {
-      sign1 = '-';
-      temp *= -1;
-    } else {
-      sign1 = ' ';
-    }
-    
-    if (t0 < 0) {
-      sign2 = '-';
-      t0 *= -1;
-    } else {
-      sign2 = ' ';
-    }
-        
-    OPEN_UART();
-      printHex((uint8_t*)_buf, pSize);
-      uputs(":  ");
-      if (sign1 == '-') uputc('-');
-      uprintf(_buf, "%d.%02dC / ", temp / 100, temp % 100);
-      if (sign2 == '-') uputc('-');
-      uprintf(_buf, "%dC, %ld.%02ld Pa / %ld.%02ld mmHg, %d.%02d%%, V_BAT = %u.%03u\n", t0, press / 100, press % 100, press / 13332, press % 13332 * 100 / 13332, hum / 100, hum % 100, v_bat / 1000, v_bat % 1000);
-    CLOSE_UART();              // stop clocking UART1
+    nrf_write_register(NRF24_STATUS_REG, NRF24_STATUS_RX_DR); // clear RX_DR bit, release IRQ line
+    CLOCK_DISABLE(SPI);                                       // stop SPI clocking
   }
 }
 
