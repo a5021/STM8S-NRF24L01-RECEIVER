@@ -165,12 +165,12 @@ void static inline uputx(uint8_t c) {
   uputc(c + ((c < 10) ? '0' : 'A' - 10));
 }
 
-void static inline printHex(uint8_t *buf, uint8_t len) {
-  for (uint8_t i = 0; i < len; i++) {
-    uputx(buf[i] >> 4);
-    uputx(buf[i] & 0x0F);
-  };
-}
+// void static inline printHex(uint8_t *buf, uint8_t len) {
+//   for (uint8_t i = 0; i < len; i++) {
+//     uputx(buf[i] >> 4);
+//     uputx(buf[i] & 0x0F);
+//   };
+// }
 
 void static inline initGPIO(void) {
 
@@ -269,7 +269,6 @@ uint8_t static inline nrf_init(uint8_t channel) {
   );
   
   return nrf_write_register(NRF24_DYNPD_REG,  1); // enable dynamic payload for pipe 0
-
 }
 
 uint8_t static inline nrf_start_receiving(void) {
@@ -283,8 +282,6 @@ uint8_t static inline nrf_start_receiving(void) {
     1 * NRF24_STATUS_RX_DR
   );
 
-  //nrf_write_register(RX_PW_P0, 8);
-  
   nrf_write_cmd(NRF24_FLUSH_RX);       
   nrf_write_cmd(NRF24_FLUSH_TX);       
 
@@ -301,24 +298,6 @@ uint8_t static inline nrf_start_receiving(void) {
   return nrf_status;
 }
 
-//uint8_t static inline nrf_stop_receiving(void) {
-//  CE_LOW();
-//  uint8_t rx_status = nrf_write_register(CONFIG,     // power down receiver
-//    0 * NRF24_CONFIG_PRIM_RX      |  // select TX mode
-//    0 * NRF24_CONFIG_PWR_UP       |  // turn power off
-//    1 * NRF24_CONFIG_EN_CRC       |  // enable CRC. Forced high if one of the bits in the
-//                                     // EN_AA is high
-//    1 * NRF24_CONFIG_CRCO         |  // CRC encoding scheme: '0' - 1 byte, '1' – 2 bytes
-//    1 * NRF24_CONFIG_MAX_RT       |  // MAX_RT interrupt not reflected on the IRQ pin
-//    1 * NRF24_CONFIG_TX_DS        |  // TX_DS interrupt not reflected on the IRQ pin
-//    1 * NRF24_CONFIG_RX_DR           // RX_DR interrupt not reflected on the IRQ pin
-//  );
-//
-//  nrf_write_cmd(FLUSH_RX);       
-//
-//  return rx_status;
-//}
-
 uint8_t static inline nrf_get_payload_size(void) {
   CSN_LOW();
   spi(NRF24_R_RX_PL_WID);  // 0x60 = "Read RX Payload Width" command
@@ -326,19 +305,6 @@ uint8_t static inline nrf_get_payload_size(void) {
   CSN_HIGH();
   return psize;
 } 
-
-void static inline nrf_get_payload(uint8_t buf[], uint8_t len) {
-  
-  CSN_LOW();
-
-  spi(NRF24_R_RX_PAYLOAD);  // 0x61 = "Read RX Payload" CMD
-
-  for (int i = 0; i < len; i++) {
-   buf[i] = spi(NRF24_NOP);
-  }
-
-  CSN_HIGH();
-}
 
 void static inline initWatchdog(void) {
   // Watchdog timeout period (LSI clock frequency = 128 kHz)
@@ -501,7 +467,7 @@ int main(void) {
 
   RUN_CPU_NORMAL();
   
-  uprintf(_buf, "NRF24L01 Receiver started.\n");
+  uputs("NRF24L01 Receiver started.\n");
   printResetStatus();
   
   while (nrf_detect() == NRF24L01_NOT_DETECTED) {
@@ -559,12 +525,23 @@ int main(void) {
       IWDG_KR= 0xAA;	                // wdog refresh
       uint8_t pSize = nrf_get_payload_size();
       if (pSize > 32) {
-        nrf_write_register(NRF24_STATUS_REG, 0x70); // clear status bits
         nrf_write_cmd(NRF24_FLUSH_RX);              // 0xE2 = clear RX buffer
         break;
       }
       
-      nrf_get_payload((uint8_t*)_buf, pSize);
+      OPEN_UART();      // start clocking UART1
+      
+      CSN_LOW();
+      
+      spi(NRF24_R_RX_PAYLOAD);  // 0x61 = "Read RX Payload" CMD
+      
+      for (int i = 0; i < pSize; i++) {
+       _buf[i] = spi(NRF24_NOP);
+       uputx(_buf[i] >> 4);
+       uputx(_buf[i] & 0x0F);
+      }
+      
+      CSN_HIGH();      
       
          /* change the endianess of the data received  */    
       press = (uint32_t) _buf[2] << 16 | (uint32_t) _buf[1] << 8 | _buf[0];
@@ -590,13 +567,12 @@ int main(void) {
         sign2 = ' ';
       }
           
-      OPEN_UART();      // start clocking UART1
-        printHex((uint8_t*)_buf, pSize);
-        uputs(":  ");
-        if (sign1 == '-') uputc('-');
-        uprintf(_buf, "%d.%02dC / ", temp / 100, temp % 100);
-        if (sign2 == '-') uputc('-');
-        uprintf(_buf, "%dC, %ld.%02ld Pa / %ld.%02ld mmHg, %d.%02d%%, V_BAT = %u.%03u\n", t_die, press / 100, press % 100, press / 13332, press % 13332 * 100 / 13332, hum / 100, hum % 100, v_bat / 1000, v_bat % 1000);
+      uputs(":  ");
+      if (sign1 == '-') uputc('-');
+      uprintf(_buf, "%d.%02dC / ", temp / 100, temp % 100);
+      if (sign2 == '-') uputc('-');
+      uprintf(_buf, "%dC, %ld.%02ld Pa / %ld.%02ld mmHg, %d.%02d%%, V_BAT = %u.%03u\n", t_die, press / 100, press % 100, press / 13332, press % 13332 * 100 / 13332, hum / 100, hum % 100, v_bat / 1000, v_bat % 1000);
+        
       CLOSE_UART();     // stop clocking UART1
     }
     nrf_write_register(NRF24_STATUS_REG, NRF24_STATUS_RX_DR); // clear RX_DR bit, release IRQ line
