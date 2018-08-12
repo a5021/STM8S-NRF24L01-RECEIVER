@@ -1,22 +1,20 @@
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 #include "iostm8s003f3.h"
-#include "pindef.h"
 
 #define RF_CHANNEL              99
 
-#define USE_IRQ                 1
+#define SET_LOW                 0   /* Low pin state */
+#define SET_HIGH                1   /* High pin state */
 
-#define CSN_LOW()               PD_ODR_ODR2 = 0;
-#define CSN_HIGH()              PD_ODR_ODR2 = 1;
-                                
-#define CE_LOW()                PD_ODR_ODR3 = 0;
-#define CE_HIGH()               PD_ODR_ODR3 = 1;
-                                
-#define RUN_CPU_FAST()          CLK_CKDIVR = 0
-#define RUN_CPU_NORMAL()        CLK_CKDIVR = CKDIVR_HSIDIV_8 | CKDIVR_CPUDIV_1
-#define RUN_CPU_SLOW()          CLK_CKDIVR = CKDIVR_HSIDIV_8 | CKDIVR_CPUDIV_128
+#define CSN(STATE)              PD_ODR_ODR2 = STATE
+#define CE(STATE)               PD_ODR_ODR3 = STATE
+
+#define RUN_FAST                0
+#define RUN_NORMAL              (CKDIVR_HSIDIV_8 | CKDIVR_CPUDIV_1)
+#define RUN_SLOW                (CKDIVR_HSIDIV_8 | CKDIVR_CPUDIV_128)
+
+#define CPU(SPEED)              CLK_CKDIVR = SPEED
 
 #define NRF24L01_DETECTED       1
 #define NRF24L01_NOT_DETECTED   0
@@ -34,8 +32,6 @@
 #define CLK_AWU                 (1 << 2)
 #define CLK_ADC                 (1 << 3)
 
-#define PCLK_DISABLE            0
-
 #define CLOCK_ENABLE(PERIPHERIAL)   CLK_PCKENR1 |= CLK_##PERIPHERIAL
 #define CLOCK_DISABLE(PERIPHERIAL)  CLK_PCKENR1 &= ~CLK_##PERIPHERIAL
 
@@ -47,9 +43,9 @@
           0 * CLK_TIM4  |                  \
           1 * CLK_TIM2  |                  \
           0 * CLK_TIM3  |                  \
-          1 * CLK_TIM1                     \
+          0 * CLK_TIM1                     \
         );                                 \
-        CLK_PCKENR2 = PCLK_DISABLE
+        CLK_PCKENR2 = 0 /* Disable AWU & ADC   */
 
 #define CKDIVR_HSIDIV_1         0    
 #define CKDIVR_HSIDIV_2         (1 << 3)
@@ -64,6 +60,44 @@
 #define CKDIVR_CPUDIV_32        5
 #define CKDIVR_CPUDIV_64        6
 #define CKDIVR_CPUDIV_128       7
+          
+//
+//  definitions to configure a pin in input mode
+//
+
+#define INPUT                   0
+#define FLOAT                   0
+#define PULL_UP                 (1 << 1)
+#define NO_INT                  0
+#define INT                     (1 << 0)
+
+  // most common pin settings for input mode
+#define INPUT_MODE              PULL_UP
+
+//
+//  definitions to configure a pin in output mode
+//
+
+#define OUTPUT                  (1 << 2)
+#define OPEN_DRAIN              0
+#define PUSH_PULL               (1 << 1)
+#define LOW_SPEED               0
+#define HIGH_SPEED              (1 << 0)
+
+  // most common pin settings for output mode
+#define OUTPUT_MODE             OUTPUT + PUSH_PULL + HIGH_SPEED
+
+  // macro to configure a pin
+#define PIN_MODE(PORT, PIN, MODE)                     \
+          P##PORT##_DDR_DDR##PIN = (MODE) >> 2;       \
+          P##PORT##_CR1_C1##PIN = ((MODE) >> 1) & 1;  \
+          P##PORT##_CR2_C2##PIN = (MODE) & 1
+
+  // macro to set a pin
+#define PIN_WRITE(PORT, PIN, VALUE) P##PORT##_ODR_ODR##PIN = VALUE
+                                      
+  // macro to get state of a pin
+#define PIN_READ(PORT, PIN)     P##PORT##_IDR_IDR##PIN
 
 #define NRF24_CONFIG_REG        0x00
 #define NRF24_EN_AA_REG         0x01
@@ -125,22 +159,11 @@
 #define OPEN_UART()              CLOCK_ENABLE(UART1)         
 #define CLOSE_UART()             while (UART1_SR_TC == 0); CLOCK_DISABLE(UART1)
 
-// #define UART_PUTC(C)	                                        \
-//   while (UART1_SR_TXE == 0);                                    \
-//   UART1_DR = C
-// 
-// uint8_t static inline uart_puts(char *s) {
-//   while (*s != 0) {
-//     UART_PUTC(*s++);
-//   }
-//   return !0;
-// }
-
-// #define uprintf(...) for(char _b[80]; snprintf(_b, sizeof(_b), __VA_ARGS__), uart_puts(_b), 0;){}
-
 #define uprintf(B, ...) snprintf(B, sizeof(B), __VA_ARGS__); uputs(B)
 
-void static inline initUART(void) {
+#define __STATIC_INLINE         static inline
+          
+void __STATIC_INLINE initUART(void) {
   
   //  Div= 16MHz/115200 = 0x8B -> Brr2= 0xB, Brr1= 0x8
   //  UART1_BRR2=0x0B;
@@ -152,42 +175,35 @@ void static inline initUART(void) {
   // UART1_CR2_REN=1;   // Enable receiver
 }
 
-void static inline uputc(char c) {
+void __STATIC_INLINE uputc(char c) {
   while (UART1_SR_TXE == 0); 
   UART1_DR = c;
 }
 
-void static inline uputs(char *s) {
+void __STATIC_INLINE uputs(char *s) {
   while (*s != 0) uputc(*s++);
 }
 
-void static inline uputx(uint8_t c) {
+void __STATIC_INLINE uputx(uint8_t c) {
   uputc(c + ((c < 10) ? '0' : 'A' - 10));
 }
 
-// void static inline printHex(uint8_t *buf, uint8_t len) {
-//   for (uint8_t i = 0; i < len; i++) {
-//     uputx(buf[i] >> 4);
-//     uputx(buf[i] & 0x0F);
-//   };
-// }
-
-void static inline initGPIO(void) {
+void __STATIC_INLINE initGPIO(void) {
 
   // IRQ pin
   PIN_MODE(C, 4, INPUT + FLOAT);
   
   // CSN pin, default is high
-  PIN_WRITE(D, 2, HIGH);
+  PIN_WRITE(D, 2, SET_HIGH);
   PIN_MODE(D, 2, OUTPUT + PUSH_PULL + LOW_SPEED);
   
   // CE pin, default is low
-  PIN_WRITE(D, 3, LOW);
+  PIN_WRITE(D, 3, SET_LOW);
   PIN_MODE(D, 3, OUTPUT + PUSH_PULL + LOW_SPEED);
 }
 
 // Initialize TIM2 to get overflow about ervery 15 sec. (fMASTER / 2^12 / 7325)
-void static inline initTIM2(void) {
+void __STATIC_INLINE initTIM2(void) {
   TIM2_PSCR = 0x0C;   //  Prescaler = 2^12.
   TIM2_ARRH = 0x1C;   //  High byte of 7325
   TIM2_ARRL = 0x9D;   //  Low byte of 7325
@@ -195,14 +211,14 @@ void static inline initTIM2(void) {
 }
 
 // Initialize SPI as master.
-void static inline initSPI() {
-  SPI_CR1_BR = 0;     //  fmaster / 2 (1,000 000 baud).
+void __STATIC_INLINE initSPI() {
+  SPI_CR1_BR   = 0;   //  fmaster / 2 (1,000 000 baud).
   SPI_CR1_MSTR = 1;   //  Master device.
-  SPI_CR1_SPE = 1;    //  Enable SPI.
+  SPI_CR1_SPE  = 1;   //  Enable SPI.
 }
 
 // Bidirectional SPI transfer function
-uint8_t static inline spi(uint8_t tx) {
+uint8_t __STATIC_INLINE spi(uint8_t tx) {
   while (SPI_SR_TXE == 0);
   SPI_DR = tx;
   while (SPI_SR_RXNE == 0);
@@ -210,103 +226,81 @@ uint8_t static inline spi(uint8_t tx) {
 }
 
 // Send command to NRF24L01 module
-uint8_t static inline nrf_write_cmd(uint8_t cmd) {
-  CSN_LOW();
+uint8_t __STATIC_INLINE nrf_write_cmd(uint8_t cmd) {
+  CSN(SET_LOW);
   uint8_t s = spi(cmd);
-  CSN_HIGH();
+  CSN(SET_HIGH);
   return s;
 }
 
 // Read NRF24L01's register
-uint8_t static inline nrf_read_register(uint8_t regNo) {
-  CSN_LOW();
+uint8_t __STATIC_INLINE nrf_read_register(uint8_t regNo) {
+  CSN(SET_LOW);
   spi(NRF24_R_REGISTER | (NRF24_REGISTER_MASK & regNo));
   uint8_t r = spi(NRF24_NOP);
-  CSN_HIGH();
+  CSN(SET_HIGH);
   return r;
 }
 
 // Write a value to NRF24L01's register
-uint8_t static inline nrf_write_register(uint8_t regNo, uint8_t regVal) {
-  CSN_LOW();
+uint8_t __STATIC_INLINE nrf_write_register(uint8_t regNo, uint8_t regVal) {
+  CSN(SET_LOW);
   uint8_t s = spi(NRF24_W_REGISTER | (NRF24_REGISTER_MASK & regNo));
   spi(regVal);
-  CSN_HIGH();
+  CSN(SET_HIGH);
   return s;
 }
 
-// 
-uint8_t static inline nrf_init(uint8_t channel) {
-
-  nrf_write_register(NRF24_SETUP_AW_REG, 1);  //  RX/TX Address width
-                                              //  0 = Illegal
-                                              //  1 = 3 bytes
-                                              //  2 = 4 bytes
-                                              //  3 = 5 bytes
-  // nrf_write_register(NRF24_EN_AA_REG, 0);       // Disable auto acknowlegement
-  nrf_write_register(NRF24_RF_CH_REG, channel); // Set radio channel number
-/*  
-  nrf_write_register(0x06,           // REG 0x06 -- data rate and pwr lvl
-      //  Set RF output power in TX mode
-      //  0x00 = -18dBm
-      //  0x02 = -12dBm
-      //  0x04 = -6dBm
-      //  0x06 =  0dBm
-                     
-      0x06                       |
-                     
-      //  Select between the high speed data rates.
-      //  0x00 – 1Mbps
-      //  0x08 – 2Mbps
-      //  0x20 – 250kbps
-        
-      0x08
-  );                     
-*/  
-  nrf_write_register(NRF24_FEATURE_REG,    // set payload parameters
-    1 * NRF24_FEATURE_EN_DYN_ACK  |        // enable W_TX_PAYLOAD_NOACK command
-    1 * NRF24_FEATURE_EN_DPL               // enable dynamic payload
+uint8_t __STATIC_INLINE nrf_init(uint8_t channel) {
+    // Set RX/TX Address width: 0 = Illegal, 1 = 3 bytes, 2 = 4 bytes, 3 = 5 bytes
+  nrf_write_register(NRF24_SETUP_AW_REG, 1);
+    // Set radio channel number
+  nrf_write_register(NRF24_RF_CH_REG, channel);
+    // set payload parameters
+  nrf_write_register(NRF24_FEATURE_REG,    
+    1 * NRF24_FEATURE_EN_DYN_ACK  |  // enable W_TX_PAYLOAD_NOACK command
+    1 * NRF24_FEATURE_EN_DPL         // enable dynamic payload
   );
-  
-  return nrf_write_register(NRF24_DYNPD_REG,  1); // enable dynamic payload for pipe 0
+    // enable dynamic payload for pipe 0
+  return nrf_write_register(NRF24_DYNPD_REG,  1);
 }
 
-uint8_t static inline nrf_start_receiving(void) {
+uint8_t __STATIC_INLINE nrf_start_receiving(void) {
   uint8_t nrf_status;
 
-  CE_LOW();
-
-  nrf_write_register(NRF24_STATUS_REG,     // clear status bits
+    // clear status bits
+  nrf_write_register(NRF24_STATUS_REG,
     1 * NRF24_STATUS_MAX_RT       |
     1 * NRF24_STATUS_TX_DS        |
     1 * NRF24_STATUS_RX_DR
   );
-
+    // clear RX/TX FOFOs
   nrf_write_cmd(NRF24_FLUSH_RX);       
   nrf_write_cmd(NRF24_FLUSH_TX);       
-
-  nrf_status = nrf_write_register(NRF24_CONFIG_REG,     // power up receiver
-    1 * NRF24_CONFIG_PRIM_RX      |  // select RX mode
-    1 * NRF24_CONFIG_PWR_UP       |  // turn power on
-    1 * NRF24_CONFIG_EN_CRC       |  // enable CRC
-    1 * NRF24_CONFIG_CRCO         |  // CRC encoding scheme: '0' - 1 byte, '1' – 2 bytes
-    1 * NRF24_CONFIG_MAX_RT       |  // MAX_RT interrupt not reflected on the IRQ pin
-    1 * NRF24_CONFIG_TX_DS        |  // TX_DS interrupt not reflected on the IRQ pin
-    0 * NRF24_CONFIG_RX_DR           // Reflect RX_DR as active low interrupt on the IRQ pin
+    // power up receiver
+  nrf_status = nrf_write_register(NRF24_CONFIG_REG,
+    1 * NRF24_CONFIG_PRIM_RX      |  // select transiever mode: 0 = TX, 1 = RX;
+    1 * NRF24_CONFIG_PWR_UP       |  // power control bit: 0 = OFF, 1 = ON;
+    1 * NRF24_CONFIG_EN_CRC       |  // CRC enable bit: 0 = DISABLE, 1 = ENABLE; 
+    1 * NRF24_CONFIG_CRCO         |  // CRC Length: 0 = 1 byte, 1 = 2 bytes;
+    1 * NRF24_CONFIG_MAX_RT       |  // Reflect MAX_RT interrupt on the IRQ pin: 0 = ENABLE, 1 = DISABLE;
+    1 * NRF24_CONFIG_TX_DS        |  // Reflect TX_DS interrupt on the IRQ pin: 0 = ENABLE, 1 = DISABLE;
+    0 * NRF24_CONFIG_RX_DR           // Reflect RX_DR interrupt on the IRQ pin: 0 = ENABLE, 1 = DISABLE;
   );
-  CE_HIGH();  // start receiving
+    // start receiving
+  CE(SET_HIGH);
   return nrf_status;
 }
 
-uint8_t static inline nrf_get_payload_size(void) {
-  CSN_LOW();
+uint8_t __STATIC_INLINE nrf_get_payload_size(void) {
+  CSN(SET_LOW);
   spi(NRF24_R_RX_PL_WID);  // 0x60 = "Read RX Payload Width" command
   uint8_t psize = spi(NRF24_NOP);
-  CSN_HIGH();
+  CSN(SET_HIGH);
   return psize;
 } 
 
-void static inline initWatchdog(void) {
+void __STATIC_INLINE initWatchdog(void) {
   // Watchdog timeout period (LSI clock frequency = 128 kHz)
   //=========================================================
   //    Prescaler  |  PR[2:0] |          Timeout       
@@ -330,7 +324,7 @@ void static inline initWatchdog(void) {
   IWDG_KR  = 0xAA;  // lock wdog registers & reload the wdog counter  
 }
 
-void static inline printResetStatus(void) {
+void __STATIC_INLINE printResetStatus(void) {
   if (RST_SR != 0) {
     uputs("\nReset source:");
     
@@ -362,7 +356,7 @@ void static inline printResetStatus(void) {
   }
 }
 
-uint8_t static inline nrf_detect(void) {
+uint8_t __STATIC_INLINE nrf_detect(void) {
   
   nrf_write_cmd(NRF24_FLUSH_TX);
   
@@ -375,10 +369,10 @@ uint8_t static inline nrf_detect(void) {
   }
 
   // send dummy 1-byte payload to the 1st FIFO buffer
-  CSN_LOW();
+  CSN(SET_LOW);
   spi(NRF24_W_TX_PAYLOAD);
   spi(0);     
-  CSN_HIGH();
+  CSN(SET_HIGH);
   
   fifo_status = nrf_read_register(NRF24_FIFO_STATUS_REG);
   if ((fifo_status & NRF24_FIFO_STATUS_TX_EMPTY) == NRF24_FIFO_STATUS_TX_EMPTY) {
@@ -390,10 +384,10 @@ uint8_t static inline nrf_detect(void) {
   }
   
   // send dummy 1-byte payload to the 2nd FIFO buffer
-  CSN_LOW();
+  CSN(SET_LOW);
   spi(NRF24_W_TX_PAYLOAD);
   spi(0); 
-  CSN_HIGH();
+  CSN(SET_HIGH);
   
   fifo_status = nrf_read_register(NRF24_FIFO_STATUS_REG);
   if ((fifo_status & NRF24_FIFO_STATUS_TX_EMPTY) == NRF24_FIFO_STATUS_TX_EMPTY) {
@@ -405,10 +399,10 @@ uint8_t static inline nrf_detect(void) {
   }
 
   // send dummy 1-byte payload to the 3rd FIFO buffer
-  CSN_LOW();
+  CSN(SET_LOW);
   spi(NRF24_W_TX_PAYLOAD);
   spi(0);
-  CSN_HIGH();
+  CSN(SET_HIGH);
 
   fifo_status = nrf_read_register(NRF24_FIFO_STATUS_REG);
   if ((fifo_status & NRF24_FIFO_STATUS_TX_EMPTY) == NRF24_FIFO_STATUS_TX_EMPTY) {
@@ -433,15 +427,15 @@ uint8_t static inline nrf_detect(void) {
   return NRF24L01_DETECTED;
 }  
 
-void static inline nrf_print_addr(uint8_t a, uint8_t len) {
-  CSN_LOW();
+void __STATIC_INLINE nrf_print_addr(uint8_t a, uint8_t len) {
+  CSN(SET_LOW);
   spi(NRF24_R_REGISTER | (NRF24_REGISTER_MASK & a));
   for (uint8_t i = 0; i < len; i++) {
     uint8_t b = spi(NRF24_NOP);
     uputx(b >> 4);
     uputx(b & 0x0F);
   }
-  CSN_HIGH();
+  CSN(SET_HIGH);
 }
 
 char _buf[80];
@@ -454,10 +448,8 @@ int main(void) {
   uint32_t press;
   uint16_t hum;
 
-  CLK_CKDIVR = 0;
-  IWDG_KR= 0xAA;	   // wdog refresh
-  
-  ENABLE_PCLOCK();
+  CPU(RUN_FAST);           // run CPU at 16 Mhz
+  ENABLE_PCLOCK();         // 
   
   initWatchdog();
   initGPIO();
@@ -465,22 +457,24 @@ int main(void) {
   initUART();
   initTIM2();
 
-  RUN_CPU_NORMAL();
-  
+  IWDG_KR= 0xAA;	   // wdog refresh
+ 
+  CPU(RUN_NORMAL);
+
   uputs("NRF24L01 Receiver started.\n");
   printResetStatus();
   
   while (nrf_detect() == NRF24L01_NOT_DETECTED) {
     uputs("No NRF24L01 detected. Wait 15 sec...\n");
-    TIM2_CR1_CEN = 1;           // run timer 2
-    while (TIM2_CR1_CEN != 0) { // while until TIM2 overflow
+    TIM2_CR1_CEN = 1;           // start timer 2
+    while (TIM2_CR1_CEN != 0) { // wait until TIM2 overflows
       IWDG_KR= 0xAA;		// wdog refresh
     }
   }
   
-  CLOCK_DISABLE(TIM2);      // stop TIM2 clocking
+  CLOCK_DISABLE(TIM2);          // stop TIM2 clocking
 
-  nrf_init(RF_CHANNEL);
+  nrf_init(RF_CHANNEL);         // configure NRF24L01+
 
   uint8_t c1 = nrf_read_register(NRF24_RF_SETUP_REG); // get RF settings
   uint8_t c2 = nrf_read_register(NRF24_CONFIG_REG);   // get config
@@ -491,57 +485,59 @@ int main(void) {
     ((c2 & NRF24_CONFIG_EN_CRC) == 0) ? "NO" : ((c2 & NRF24_CONFIG_CRCO) == NRF24_CONFIG_CRCO) ? "16" : "8"
   );
   
-  uint8_t a_len = nrf_read_register(0x03) + 2;
-  
+    // read ADDR_WIDTH register
+  uint8_t a_len = nrf_read_register(0x03) + 2; 
+    // Print RX ADDRESS
   uputs("RX ADDR: ");
   nrf_print_addr(NRF24_RX_ADDR_P0_REG, a_len);
-  
+    // Print TX ADDRESS
   uputs("\nTX ADDR: ");  
   nrf_print_addr(NRF24_TX_ADDR_REG, a_len);
-  
   uputc('\n');
   
   CLOSE_UART();
   
   nrf_start_receiving();
   
-  while (1) {    // ================= main loop ===============
-
-    // The RX_DR IRQ is asserted by a new packet arrival event. 
-    // The procedure for handling this interrupt should be: 
-    //    1) read payload through SPI, 
-    //    2) clear RX_DR IRQ, 
-    //    3) read FIFO_STATUS to check if there are more
-    //       payloads available in RX FIFO, 
-    //    4) if there are more data in RX FIFO, repeat from step 1).  
+  /********************* MAIN LOOP ***************************/
   
-
+  for(;;) {    
+    CLOCK_DISABLE(SPI);                 // stop SPI clocking
+    CPU(RUN_SLOW);                      // lower CPU speed
     while(PC_IDR_IDR4 != 0) {           // while IRQ line stands high
       IWDG_KR= 0xAA;	                // refresh watchdog
     }
+    CPU(RUN_NORMAL);                    // restore CPU speed
     CLOCK_ENABLE(SPI);                  // start SPI clocking
     
-    while ((nrf_read_register(NRF24_FIFO_STATUS_REG) & NRF24_FIFO_STATUS_RX_EMPTY) == 0) {
-      IWDG_KR= 0xAA;	                // wdog refresh
+    do {
+      // The RX_DR IRQ is asserted by a new packet arrival event. 
+      // The procedure for handling this interrupt should be: 
+      //    1) read payload through SPI, 
+      //    2) read FIFO_STATUS to check if there are more
+      //       payloads available in RX FIFO, 
+      //    3) if there are more data in RX FIFO, repeat from step 1).  
+      //    4) clear RX_DR IRQ, 
       uint8_t pSize = nrf_get_payload_size();
       if (pSize > 32) {
-        nrf_write_cmd(NRF24_FLUSH_RX);              // 0xE2 = clear RX buffer
-        break;
+        nrf_write_cmd(NRF24_FLUSH_RX);  // 0xE2 = clear RX buffer
+        continue;
       }
       
-      OPEN_UART();      // start clocking UART1
-      
-      CSN_LOW();
-      
-      spi(NRF24_R_RX_PAYLOAD);  // 0x61 = "Read RX Payload" CMD
+      OPEN_UART();                      // start clocking UART1
+
+      IWDG_KR= 0xAA;	                // wdog refresh
+
+         /***** READ PAYLOAD ******/
+      CSN(SET_LOW);
+      spi(NRF24_R_RX_PAYLOAD);          // 0x61 = "Read RX Payload" CMD
       
       for (int i = 0; i < pSize; i++) {
        _buf[i] = spi(NRF24_NOP);
        uputx(_buf[i] >> 4);
        uputx(_buf[i] & 0x0F);
       }
-      
-      CSN_HIGH();      
+      CSN(SET_HIGH);      
       
          /* change the endianess of the data received  */    
       press = (uint32_t) _buf[2] << 16 | (uint32_t) _buf[1] << 8 | _buf[0];
@@ -550,7 +546,7 @@ int main(void) {
       hum   = _buf[7] << 8 | _buf[6];
       v_bat = _buf[9] << 8 | _buf[8];
       
-      IWDG_KR= 0xAA;	              // wdog refresh
+      IWDG_KR= 0xAA;	                // wdog refresh
       
       char sign1, sign2;
       if (temp < 0) {
@@ -572,11 +568,10 @@ int main(void) {
       uprintf(_buf, "%d.%02dC / ", temp / 100, temp % 100);
       if (sign2 == '-') uputc('-');
       uprintf(_buf, "%dC, %ld.%02ld Pa / %ld.%02ld mmHg, %d.%02d%%, V_BAT = %u.%03u\n", t_die, press / 100, press % 100, press / 13332, press % 13332 * 100 / 13332, hum / 100, hum % 100, v_bat / 1000, v_bat % 1000);
-        
       CLOSE_UART();     // stop clocking UART1
-    }
+      
+    } while ((nrf_read_register(NRF24_FIFO_STATUS_REG) & NRF24_FIFO_STATUS_RX_EMPTY) == 0);
+
     nrf_write_register(NRF24_STATUS_REG, NRF24_STATUS_RX_DR); // clear RX_DR bit, release IRQ line
-    CLOCK_DISABLE(SPI);                                       // stop SPI clocking
   }
 }
-
