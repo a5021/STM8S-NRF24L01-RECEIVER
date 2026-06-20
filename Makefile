@@ -1,5 +1,5 @@
 CC      = sdcc
-CFLAGS  = -mstm8 --std-c99 --out-fmt-ihx -Iinc --all-callee-saves
+CFLAGS  = -mstm8 --out-fmt-ihx -Iinc --all-callee-saves
 LDFLAGS = -mstm8 --out-fmt-ihx --iram-size 1024 --xram-size 0 --code-size 16384
 
 SRC_DIR = src
