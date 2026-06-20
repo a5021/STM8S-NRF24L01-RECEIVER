@@ -1,6 +1,6 @@
 # STM8S-NRF24L01-RECEIVER
 
-[![Build](https://github.com/a5021/STM8S-NRF24L01-RECEIVER/actions/workflows/build.yml/badge.svg?branch=feature/sdcc-port)](https://github.com/a5021/STM8S-NRF24L01-RECEIVER/actions/workflows/build.yml) [![MCU](https://img.shields.io/badge/MCU-STM8S003F3-00A9E0)]() [![Radio](https://img.shields.io/badge/Radio-nRF24L01-00A9E0)]() [![License](https://img.shields.io/badge/License-MIT-yellow)]()
+[![Build](https://github.com/a5021/STM8S-NRF24L01-RECEIVER/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/a5021/STM8S-NRF24L01-RECEIVER/actions/workflows/build.yml) [![MCU](https://img.shields.io/badge/MCU-STM8S003F3-00A9E0)]() [![Radio](https://img.shields.io/badge/Radio-nRF24L01-00A9E0)]() [![License](https://img.shields.io/badge/License-MIT-yellow)]()
 
 Wireless nRF24L01+ receiver based on STM8S003F3. Listens on RF channel 99, receives variable-length dynamic payloads, decodes sensor data (BMP180 pressure/temperature, SI7021 humidity/temperature, BH1750 light, battery voltage, die temperature) and prints the values over UART at 115200 baud.
 
@@ -22,7 +22,7 @@ Two compilers are supported: **SDCC** (free, cross-platform, CI-ready) and **IAR
 
 | Feature               | SDCC                                       | IAR EWSTM8                                 |
 |-----------------------|--------------------------------------------|--------------------------------------------|
-| Compiler              | `sdcc` 4.2.x                               | `iccstm8`                                  |
+| Compiler              | `sdcc` 4.6.x                               | `iccstm8`                                  |
 | License               | GPLv2 (free)                               | Commercial (paid license required)         |
 | Host OS               | Linux, macOS, Windows                      | Windows only                               |
 | Command               | `make`                                     | Open `Project.eww` in IDE                  |
@@ -37,14 +37,14 @@ Two compilers are supported: **SDCC** (free, cross-platform, CI-ready) and **IAR
 make
 ```
 
-Requires: `sdcc` ≥4.2.0, `python3` ≥3.6, `packihx` (included with SDCC).
+Requires: `sdcc` ≥4.6.0, `python3` ≥3.6, `packihx` (included with SDCC).
 
 The build process:
 1. `iar2sdcc.py` preprocesses `src/main.c` — patches `SPI_CR1_BR` bitfield access (IAR-specific) to read-modify-write, and replaces `snprintf` with `sprintf` (SDCC's STM8 libc lacks `snprintf`).
 2. `sdcc` compiles the patched source for STM8 with `--out-fmt-ihx`.
 3. `packihx` converts the Intel HEX record into final `.hex`.
 
-CI is fully automated via `.github/workflows/build.yml` — SDCC 4.2.0 is cached from SourceForge, so no toolchain download on subsequent runs.
+CI is fully automated via `.github/workflows/build.yml` — SDCC 4.6.0-rc2 is cached from SourceForge, so no toolchain download on subsequent runs.
 
 ### IAR Embedded Workbench
 
