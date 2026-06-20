@@ -94,36 +94,36 @@ The receiver decodes the following payload fields (7-11 bytes):
      |
   +=================================+
   |     Main loop                   |
-  |  CLK_CKDIVR = SLOW (2 MHz)     |
+  |  CLK_CKDIVR = SLOW (2 MHz)      |
   |  CLOCK_DISABLE(SPI)             |
   |  while (IRQ line HIGH) {        |
   |      IWDG refresh               |
   |  }                              |
   +=================================+
-     |                         ^
-     | IRQ goes LOW            |
-     v                         |
-  +-------------------+       |
-  | CLK = NORMAL      |       |
-  | CLOCK_ENABLE(SPI) |       |
-  +-------------------+       |
-     v                         |
-  +-------------------+       |
-  | RX FIFO loop      |       |
-  | do {              |       |
-  |  nrf_get_size()  |       |
-  |  if >32 flush    |       |
-  | nrf_read_payload |       |
-  | decode fields    |       |
-  | uprintf values   |       |
-  |} while(!RX_EMPTY)|       |
-  +-------------------+       |
-     |                         |
-     v                         |
-  +-------------------+       |
-  | CLR RX_DR         |       |
-  | DISABLE_UART      |-------+
-  +-------------------+
+     |                              ^
+     | IRQ goes LOW                 |
+     v                              |
+  +-------------------+             |
+  | CLK = NORMAL      |             |
+  | CLOCK_ENABLE(SPI) |             |
+  +-------------------+             |
+     v                              |
+  +-------------------+             |
+  | RX FIFO loop      |             |
+  | do {              |             |
+  |   nrf_get_size()  |             |
+  |   if >32 flush    |             |
+  | nrf_read_payload  |             |
+  |   decode fields   |             |
+  |   uprintf values  |             |
+  | } while(!RX_EMPTY)|             |
+  +-------------------+             |
+     |                              |
+     v                              |
+  +-------------------+             |
+  | CLR RX_DR         |             |
+  | DISABLE_UART      |-------------+
+  +-------------------+             |
 ```
 
 ## Project Structure
