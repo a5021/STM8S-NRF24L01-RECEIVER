@@ -12,7 +12,7 @@ This branch adds **SDCC**-based build system with `iar2sdcc.py` preprocessing, e
 - nRF24L01+ in Enhanced ShockBurst RX mode, dynamic payload length, NoACK
 - 3-byte address width, channel 99, 2 Mbps, 16-bit CRC
 - Decodes multisensor composite packets: pressure, temperature, humidity, illuminance, VBAT, die temperature
-- Clock scaling for power saving: 16 MHz → 2 MHz during IRQ wait
+- Clock scaling for power saving: 16 MHz to 2 MHz during IRQ wait
 - Peripheral clock gating: SPI/UART clocked only when active
 - Independent watchdog (IWDG) with LSI, kicked every idle loop iteration
 - Receives all available payloads from RX FIFO in burst
@@ -49,7 +49,6 @@ Open `Project.eww` in IAR EWSTM8.
 | NRF_CE | PD3 | GPIO output, chip enable, active high |
 | SPI_SCK | PD0 | |
 | SPI_MISO | PD1 | |
-| SPI_MOSI | PD2 | (shared with CSN on some STM8S variants - verify schematic) |
 | UART_TX | PD5 | 115200 baud |
 
 ## Radio Protocol
@@ -94,12 +93,12 @@ The receiver decodes the following payload fields (7-11 bytes):
   +-------------------+
      |
   +=================================+
-  |     Main loop                  |
+  |     Main loop                   |
   |  CLK_CKDIVR = SLOW (2 MHz)     |
-  |  CLOCK_DISABLE(SPI)            |
-  |  while (IRQ line HIGH) {       |
-  |      IWDG refresh              |
-  |  }                             |
+  |  CLOCK_DISABLE(SPI)             |
+  |  while (IRQ line HIGH) {        |
+  |      IWDG refresh               |
+  |  }                              |
   +=================================+
      |                         ^
      | IRQ goes LOW            |
@@ -110,20 +109,20 @@ The receiver decodes the following payload fields (7-11 bytes):
   +-------------------+       |
      v                         |
   +-------------------+       |
-  | RX FIFO loop:      |       |
-  | do {               |       |
-  |   nrf_get_size()  |       |
-  |   if >32 flush    |       |
-  |   nrf_read_payload |       |
-  |   decode fields   |       |
-  |   uprintf values  |       |
-  | } while (!RX_EMPTY)|       |
+  | RX FIFO loop      |       |
+  | do {              |       |
+  |  nrf_get_size()  |       |
+  |  if >32 flush    |       |
+  | nrf_read_payload |       |
+  | decode fields    |       |
+  | uprintf values   |       |
+  |} while(!RX_EMPTY)|       |
   +-------------------+       |
      |                         |
      v                         |
   +-------------------+       |
-  | CLR RX_DR         |-------+
-  | CLOCK_DISABLE(UART)|
+  | CLR RX_DR         |       |
+  | DISABLE_UART      |-------+
   +-------------------+
 ```
 
