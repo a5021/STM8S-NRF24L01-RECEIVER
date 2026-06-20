@@ -11,13 +11,23 @@ typedef volatile struct {
 /* ============== PORT C ============== */
 volatile uint8_t __at(0x500A) _PC_ODR;
 volatile uint8_t __at(0x500B) _PC_IDR;
-volatile __bits8_t __at(0x500B) _PC_IDR_bits;
 volatile uint8_t __at(0x500C) _PC_DDR;
 volatile uint8_t __at(0x500D) _PC_CR1;
 volatile uint8_t __at(0x500E) _PC_CR2;
 
+volatile __bits8_t __at(0x500B) _PC_IDR_bits;
+volatile __bits8_t __at(0x500C) _PC_DDR_bits;
+volatile __bits8_t __at(0x500D) _PC_CR1_bits;
+volatile __bits8_t __at(0x500E) _PC_CR2_bits;
+
 #define PC_IDR       _PC_IDR
 #define PC_IDR_IDR4  _PC_IDR_bits.b4
+#define PC_DDR       _PC_DDR
+#define PC_DDR_DDR4  _PC_DDR_bits.b4
+#define PC_CR1       _PC_CR1
+#define PC_CR1_C14   _PC_CR1_bits.b4
+#define PC_CR2       _PC_CR2
+#define PC_CR2_C24   _PC_CR2_bits.b4
 
 /* ============== PORT D ============== */
 volatile uint8_t __at(0x500F) _PD_ODR;
