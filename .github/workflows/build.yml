@@ -1,0 +1,35 @@
+name: Build
+
+on:
+  push:
+    branches: [ feature/sdcc-port ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache SDCC toolchain
+        id: cache-sdcc
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/sdcc
+          key: sdcc-4.2.0-linux-amd64
+
+      - name: Install SDCC toolchain
+        if: steps.cache-sdcc.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget bzip2
+          mkdir -p /home/runner/sdcc
+          wget -qO- "https://sourceforge.net/projects/sdcc/files/sdcc-linux-amd64/4.2.0/sdcc-4.2.0-amd64-unknown-linux2.5.tar.bz2/download" \
+            | tar -xjf - -C /home/runner/sdcc --strip=1
+
+      - name: Add SDCC to PATH
+        run: echo "/home/runner/sdcc/bin" >> $GITHUB_PATH
+
+      - name: Build
+        run: make
