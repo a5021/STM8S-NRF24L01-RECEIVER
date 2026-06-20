@@ -92,7 +92,7 @@ The receiver decodes the following payload fields (7-11 bytes):
 
 ## Firmware Architecture
 
-```
+`
   Cold boot
      |
   +-------------------+
@@ -118,35 +118,35 @@ The receiver decodes the following payload fields (7-11 bytes):
   |      IWDG refresh               |
   |  }                              |
   +=================================+
-     |                              ^
-     | IRQ goes LOW                 |
-     v                              |
-  +-------------------+             |
-  | CLK = NORMAL      |             |
-  | CLOCK_ENABLE(SPI) |             |
-  +-------------------+             |
-     v                              |
-  +-------------------+             |
-  | RX FIFO loop      |             |
-  | do {              |             |
-  |   nrf_get_size()  |             |
-  |   if >32 flush    |             |
-  | nrf_read_payload  |             |
-  |   decode fields   |             |
-  |   uprintf values  |             |
-  | } while(!RX_EMPTY)|             |
-  +-------------------+             |
-     |                              |
-     v                              |
-  +-------------------+             |
-  | CLR RX_DR         |             |
+     |
+     | IRQ goes LOW
+     v
+  +-------------------+
+  | CLK = NORMAL      |
+  | CLOCK_ENABLE(SPI) |
+  +-------------------+
+     |
+     v
+  +-------------------+
+  | RX FIFO loop      |
+  | do {              |
+  |   nrf_get_size()  |
+  |   if >32 flush    |
+  |   nrf_read_payload|
+  |   decode fields   |
+  |   uprintf values  |
+  | } while(!RX_EMPTY)|
+  +-------------------+
+     |
+     v
+  +-------------------+
+  | CLR RX_DR         |
   | DISABLE_UART      |
   +-------------------+
      |
      v
      (back to Main loop)
-```
-
+`
 ## Project Structure
 
 ```
