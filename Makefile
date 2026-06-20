@@ -1,6 +1,6 @@
 CC      = sdcc
 CFLAGS  = -mstm8 --out-fmt-ihx -Iinc --all-callee-saves
-LDFLAGS = -mstm8 --out-fmt-ihx --iram-size 1024 --xram-size 0 --code-size 16384
+LDFLAGS = -mstm8 -Iinc --iram-size 1024 --xram-size 0 --code-size 16384
 
 SRC_DIR = src
 BUILD_DIR = build
@@ -21,8 +21,8 @@ $(BUILD_DIR)/%_patched.c: $(SRC_DIR)/%.c inc/iostm8s003f3.h | $(BUILD_DIR)
 $(TARGET).ihx: $(C_PATCHED)
 	$(CC) $(CFLAGS) $(C_PATCHED) -o $@
 
-$(TARGET).hex: $(TARGET).ihx
-	$(CC) $(LDFLAGS) $(C_PATCHED) -o $@
+$(TARGET).hex: $(BUILD_DIR)/firmware.ihx
+	packihx $(BUILD_DIR)/firmware.ihx > $@
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
