@@ -141,7 +141,7 @@ The receiver decodes the following payload fields (7-11 bytes):
   +-------------------+             |
   | CLR RX_DR         |             |
   | DISABLE_UART      |-------------+
-  +-------------------+             |
+  +-------------------+
 ```
 ## Project Structure
 
