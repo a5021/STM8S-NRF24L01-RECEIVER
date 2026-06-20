@@ -2,20 +2,23 @@
 """
 iar2sdcc.py — Patch IAR-specific constructs for SDCC compatibility
 
-Transforms multi-bit SFR field assignments (which SDCC cannot express
-via __sbit) into full-register read-modify-write operations.
-
 Usage:
     python3 iar2sdcc.py <input.c> [output.c]
-    If output.c is omitted, the file is modified in place.
 """
 import re, sys
 
 def patch_source(src: str) -> str:
-    # SPI_CR1_BR = N  ->  SPI_CR1 = (SPI_CR1 & ~0x0E) | (N << 1)
+    # 1. SPI_CR1_BR = N  ->  SPI_CR1 = (SPI_CR1 & ~0x0E) | (N << 1)
     src = re.sub(
         r'SPI_CR1_BR\s*=\s*(\d+)\s*;',
         r'SPI_CR1 = (SPI_CR1 & ~0x0E) | (\1 << 1);',
+        src
+    )
+    # 2. snprintf(B, sz, ...) -> sprintf(B, ...)
+    #    SDCC for STM8 does not provide snprintf
+    src = re.sub(
+        r'\bsnprintf\s*\(',
+        'sprintf(',
         src
     )
     return src
