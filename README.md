@@ -140,10 +140,10 @@ The receiver decodes the following payload fields (7-11 bytes):
      v                              |
   +-------------------+             |
   | CLR RX_DR         |             |
-  | DISABLE_UART      |-------------+
-  +-------------------+             |
-     |                              |
-     v                              |
+  | DISABLE_UART      |
+  +-------------------+
+     |
+     v
      (back to Main loop)
 ```
 
