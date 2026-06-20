@@ -14,11 +14,11 @@ def patch_source(src: str) -> str:
         r'SPI_CR1 = (SPI_CR1 & ~0x0E) | (\1 << 1);',
         src
     )
-    # 2. snprintf(B, sz, ...) -> sprintf(B, ...)
-    #    SDCC for STM8 does not provide snprintf
+    # 2. snprintf(buf, size, fmt, ...) -> sprintf(buf, fmt, ...)
+    #    SDCC for STM8 does not provide snprintf; strip size param
     src = re.sub(
-        r'\bsnprintf\s*\(',
-        'sprintf(',
+        r'\bsnprintf\(\s*([^,]+)\s*,\s*[^,]+\s*,',
+        r'sprintf(\1,',
         src
     )
     return src
