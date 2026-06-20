@@ -2,14 +2,14 @@
 
 [![Build](https://github.com/a5021/STM8S-NRF24L01-RECEIVER/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/a5021/STM8S-NRF24L01-RECEIVER/actions/workflows/build.yml) [![MCU](https://img.shields.io/badge/MCU-STM8S003F3-00A9E0)]() [![Radio](https://img.shields.io/badge/Radio-nRF24L01-00A9E0)]() [![License](https://img.shields.io/badge/License-MIT-yellow)]()
 
-Wireless nRF24L01+ receiver based on STM8S003F3. Listens on RF channel 99, receives variable-length dynamic payloads, decodes sensor data (BMP180 pressure/temperature, SI7021 humidity/temperature, BH1750 light, battery voltage, die temperature) and prints the values over UART at 115200 baud.
+Wireless nRF24L01+ receiver based on STM8S003F3. Listens on RF channel 99, receives variable-length dynamic payloads, decodes sensor data (BMP180 pressure/temperature, SI7021 humidity/temperature, battery voltage, die temperature) and prints the values over UART at 115200 baud.
 
 ## Features
 
 - Register-level, bare-metal firmware (no HAL, no SPL)
 - nRF24L01+ in Enhanced ShockBurst RX mode, dynamic payload length, NoACK
 - 3-byte address width, channel 99, 2 Mbps, 16-bit CRC
-- Decodes multisensor composite packets: pressure, temperature, humidity, illuminance, VBAT, die temperature
+- Decodes multisensor composite packets: pressure, temperature, humidity, VBAT, die temperature
 - Clock scaling for power saving: 16 MHz to 2 MHz during IRQ wait
 - Peripheral clock gating: SPI/UART clocked only when active
 - Independent watchdog (IWDG) with LSI, kicked every idle loop iteration
