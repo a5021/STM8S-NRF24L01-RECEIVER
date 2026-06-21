@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/a5021/STM8S-NRF24L01-RECEIVER/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/a5021/STM8S-NRF24L01-RECEIVER/actions/workflows/build.yml) [![MCU](https://img.shields.io/badge/MCU-STM8S003F3-00A9E0)]() [![Radio](https://img.shields.io/badge/Radio-nRF24L01-00A9E0)]() [![License](https://img.shields.io/badge/License-MIT-yellow)]()
 
-Wireless nRF24L01+ receiver based on STM8S003F3. Listens on RF channel 99, receives variable-length dynamic payloads, decodes sensor data (BMP180 pressure/temperature, SI7021 humidity/temperature, battery voltage, die temperature) and prints the values over UART at 115200 baud. The UART output is consumed by an OpenWrt-based router, which forwards the telemetry to the internet via a Perl script. It receives datagrams transmitted by the [STM32F030F4P6-WIRELESS-MULTISENSOR](https://github.com/a5021/STM32F030F4P6-WIRELESS-MULTISENSOR) node and relayed by the [ATMEGA8-NRF24L01-REPEATER](https://github.com/a5021/ATMEGA8-NRF24L01-REPEATER).
+Wireless nRF24L01+ receiver based on STM8S003F3. Listens on RF channel 99, receives variable-length dynamic payloads, decodes sensor data (BMP180 pressure/temperature, SI7021 humidity/temperature, battery voltage, die temperature) and prints the values over UART at 115200 baud. The UART output is consumed by an OpenWrt-based router, which forwards the telemetry to the internet via a set of scripts. It receives datagrams transmitted by the [STM32F030F4P6-WIRELESS-MULTISENSOR](https://github.com/a5021/STM32F030F4P6-WIRELESS-MULTISENSOR) node and relayed by the [ATMEGA8-NRF24L01-REPEATER](https://github.com/a5021/ATMEGA8-NRF24L01-REPEATER).
 
 ## Features
 
