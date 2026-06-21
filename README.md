@@ -155,3 +155,8 @@ Makefile                    SDCC build
 Project.eww / .ewp / .ewd   IAR Embedded Workbench project
 *.pdsprj                    Proteus simulation
 ```
+
+## Related Projects
+
+- [STM32F030F4P6-WIRELESS-MULTISENSOR](https://github.com/a5021/STM32F030F4P6-WIRELESS-MULTISENSOR) — wireless sensor node whose datagrams this receiver can decode
+- [ATMEGA8-NRF24L01-REPEATER](https://github.com/a5021/ATMEGA8-NRF24L01-REPEATER) — ATmega8-based repeater that relays sensor data for reception by this device
